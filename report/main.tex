@@ -1,0 +1,840 @@
+\documentclass[sn-mathphys-num]{sn-jnl}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{tcolorbox}
+\usetikzlibrary{shapes.geometric}
+\newcommand{\warningsign}{\tikz[baseline=-.75ex] \node[shape=regular polygon, regular polygon sides=3, inner sep=0pt, draw, thick] {\textbf{!}};}
+\setlength{\parskip}{\baselineskip}
+\newcommand{\warning}{
+	{\fontencoding{U}\fontfamily{futs}\selectfont\char 66\relax}
+}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+% \definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{backcolour}{rgb}{1.0, 1.0, 1.0}
+
+\lstdefinestyle{mystyle}{
+		backgroundcolor=\color{backcolour},   
+		commentstyle=\color{codegreen},
+		keywordstyle=\color{magenta},
+		numberstyle=\tiny\color{codegray},
+		stringstyle=\color{codepurple},
+		basicstyle=\ttfamily\footnotesize,
+		breakatwhitespace=false,         
+		breaklines=true,                 
+		captionpos=b,                    
+		keepspaces=true,                 
+		numbers=left,                    
+		numbersep=5pt,                  
+		showspaces=false,                
+		showstringspaces=false,
+		showtabs=false,                  
+		tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\usepackage{hyperref}
+
+\usepackage{multicol}
+\setlength{\columnseprule}{1pt}
+\setlength{\columnsep}{1cm}
+
+\usepackage{enumitem} % Required for list customization
+\setlist{partopsep=0pt, topsep=0pt} % Customize spacing around and inside lists
+\renewcommand{\labelenumi}{\alph{enumi}.} % Change numbering in the enumerate environment by letter rather than number
+
+\setlength{\parindent}{0pt} % Suppress paragraph indentation
+
+\usepackage{graphicx} % Required for including images
+\graphicspath{{Figures/}{./}} % Specifies where to look for included images (trailing slash required)
+
+\usepackage{float} % Allows more precisely positioning floats e.g. \begin{figure}[H]
+
+%\usepackage{mhchem} % Package for chemical equation typesetting
+\usepackage{siunitx} % Provides the \SI{}{} and \si{} commands for typesetting technical/scientific SI units correctly
+
+\usepackage{amsmath, amssymb, amsthm} % Required for some math elements 
+
+\usepackage{bookmark}
+\usepackage{booktabs}
+
+\usepackage{color}
+\usepackage{tcolorbox}
+\definecolor{Green}{rgb}{0.2,0.9,0.2}
+
+\usepackage{tablefootnote}
+\usepackage{amsmath, amssymb, graphics, setspace}
+% \renewcommand{\labelitemi}{$\blacksquare$}
+
+\newcommand{\mathsym}[1]{{}}
+\newcommand{\unicode}[1]{{}}
+
+\newcounter{mathematicapage}
+
+\title[Article Title]{Rapport de Projet : Logiciel de Ray-Tracing}
+% \author{Hubert Damian\\Physique BA3}
+\author{\fnm{Damian} \sur{Hubert} : \sfx{Physique BA3}}
+\date{Mars 2024}
+% \def\imgscale{0.9}
+
+\begin{document}
+% \DeclareMathSizes{16pt}{14pt}{14pt}{14pt} 
+% \setmathfont{Latin Modern Math}[Scale=10]
+
+\setlength{\abovedisplayskip}{1pt}
+\setlength{\belowdisplayskip}{1pt}
+
+\maketitle
+\tableofcontents
+\section{Introduction}
+La compagnie OPERA-WCG s'apprête à ouvrir de nouveaux bureaux. Le wifi n'y étant pas encore
+installé, ce rapport a pour but de proposer plusieurs solutions de placement des émetteurs optimales dépendant
+du budget disponible. Il commencera par la modélisation du problème avec toutes
+ses hypothèses. Il décrira l'implementation logicielle
+puis présentera une verification par calculs manuels. 
+Finalement le rapport parlera d'optimisation et conclura sur les solutions annoncées.
+
+
+
+\section{Modélisation}
+    \subsection{Hypothèses}
+    \begin{enumerate}
+        \item Les rayons se propagent dans un plan horizontal $\equiv$ plan de propagation $\mathbf{\Pi}$ 
+        auquel appartiendra la normale à toutes les surfaces sur lesquelles vont interagir les rayons.
+        \item Le champ électrique est polarisé sur l'axe perpendiculaire à $\mathbf{\Pi}$
+        donc on le considérera comme un scalaire $E$.
+        \item On regarde le rayonnement de l'antenne en champ lointain (voir \ref{sub:cl}).
+        \item \label{dipole} Les émetteurs sont des antennes dipoles $\lambda/2$ \textbf{sans pertes}
+        et placées verticalement ($\perp \mathbf{\Pi}$) donc emission \textbf{isotrope} dans $\mathbf{\Pi}$.
+        \item L'atténuation après deux réflexions est suffisante pour ne pas devoir en calculer plus.
+        \item La diffraction est négligée: $\text{objets} \sim 1m >> \lambda = \frac{3.10^8ms^{-1}}{60Ghz} = 5 \times 10^{-3}m$. 
+        Le tracé de rayons de l'optique géométrique s'applique.
+        \item L'épaisseur des murs est negligée dans le calcul géométrique des rayons mais pas
+        dans le calcul des coefficients de réflexion et de transmission.
+        \item On est dans la gamme des fréquences radio où la conductivité
+        peut être approximée par son expression statique $\sigma_s$
+        pour ensuite définir la conductivité équivalente des matériaux par $\sigma = \sigma_s + w\epsilon^{\prime \prime}$
+        traduisant la dissipation par effet Joule et diélectrique.
+        \item La puissance est calculée en zone locale (puissance moyenne).
+    \end{enumerate}
+
+    \subsection{Formules}
+
+    On calculera la puissance dans une zone locale par
+    \begin{align}
+        <P_{R X}>=\frac{1}{8 R_a} \sum_{n=1}^N\left|\vec{h}_e^{R X}\left(\theta_n, \phi_n\right) \cdot \underline{\vec{E}}_n(\vec{r})\right|^2\\
+        \underline{E}_n=\underbrace{\Gamma_1 \Gamma_2 \ldots}_{\text {Réflexions }} \underbrace{T_1 T_2 \ldots}_{\text {Transmissions }} E_0\left(\theta_{T X n}, \phi_{T X n}\right) \frac{e^{-j \beta d_n}}{d_n}
+    \end{align}
+    La propriété d'isotropie de l'antenne dans $\mathbf{\Pi}$ permet de définir la constante $P_{RX0} = \frac{60 G_{RX}P_{RX} \lambda^2}{8 R_{ar} \pi^2}$ avec
+    $G_{RX}P_{RX} = \frac{Z_0 P_{TX}}{\pi R_{ar}}$ et on obtient
+    \begin{equation}
+    \label{f:p_moy}
+        <P_{RX}> = P_{RX0} \sum_{n=1}^N |\Gamma_1|^2 \dots |T_1|^2 \dots \frac{1}{d_n^2}
+    \end{equation}
+
+    Le reste des formules sera vu dans l'exercice $\ref{subsub:2rebond}$
+
+    \subsection{Champ lointain}
+    \label{sub:cl}
+
+    Il faut prendre des précautions avant d'appliquer l'hypothèse des
+    champs lointains. 
+
+    Il faut se trouver à une distance $d > d_{\mathrm{ff}}$
+    \begin{equation}
+        d_{\mathrm{ff}}=\operatorname{Max}\left\{1,6 \lambda ; 5 D ; \frac{2 D^2}{\lambda}\right\}
+    \end{equation}
+    Avec une antenne dipole : $D = \frac{\lambda}{2}$ et donc \fbox{$d_{\mathrm{ff}} = 5\frac{\lambda}{2}=12.5mm$}
+
+    Dans le code cela sera pris en compte dans la puissance maximale
+    admise pour le trajet de chaque rayon. 
+    Dans la fonction \texttt{calculate\_power} de \textbf{unit\_solver},
+    avant de multiplier par les coefficients $T, \Gamma$ on s'assure que 
+    $\frac{P_{RX0}}{d_n^2} < \frac{P_{RX0}}{d_{\mathrm{ff}}^2}$.
+
+ 
+\section{Fonctionnement du code}
+\subsection{Architecture générale}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{images/programme.jpeg}
+\end{figure}
+
+\subsection{World}
+
+L'objet \textbf{world} contient tous les \textbf{wall} d'abord en mémoire dynamique provisoire
+puis transférée dans le gpu.
+
+Chaque objet \textbf{wall} contient ses coordonnées, ses vecteurs unitaires $\vec{u}$ (tangent)
+et $\vec{n}$ (normal) et une instance du \textbf{material} le décrivant.
+Cet objet \textbf{material} contient les propriétés $\epsilon_r, \sigma$ et pré-calcule $Z, \gamma$.
+
+La classe \textbf{Wall} contient des méthodes \texttt{@static} pour calculer les coefficients
+de réflexion $\Gamma$ et de transmission $T$ en module carré.
+
+\subsubsection{Optimisation: AoS vs SoA}
+Une fois le transfert dans le gpu achevé, 
+\textbf{world} va contenir ses \textbf{wall} sous forme 
+d'\texttt{arrays} et non sous forme d'objets.
+Par exemple les normales de tous les murs seront dans une grande array.
+Un mur sera juste un indice dans ces grandes \texttt{arrays}.
+
+Si on arrange mal notre mémoire on peut augmenter le taux de \textit{cache miss}.
+
+Par exemple, si on demande la normale au mur 3, il est fort probable
+que l'on demande aussi son vecteur tangent, ses coordonnées, etc. 
+Il serait pratique d'avoir ses informations stockées proches 
+les unes des autres.
+C'est pourquoi nous utilisons un stockage \texttt{AoS : array of structures}
+plutôt que \texttt{SoA : structure of arrays}
+% \begin{lstlisting}[language=python,title=https://docs.taichi-lang.org/docs/layout]
+\begin{lstlisting}[language=python]
+# address: low ...................... high
+# AoS:     RGBRGBRGBRGBRGBRGB.............
+# SoA:     RRRRR...RGGGGGGG...GBBBBBBB...B    
+\end{lstlisting}
+
+On accomplit cela dans le code au moment d'allouer la mémoire dans 
+des \texttt{dense fields} de taichi
+\begin{lstlisting}{language=python}
+    ti.root.dense(ti.i, self.m).place(self.r0, self.r1, self.u, self.n, self.l, self.gamma, self.Z, self.eps_r)
+    # instead of 
+    # ti.root.dense(ti.i, self.m).place(self.r0)
+    # ti.root.dense(ti.i, self.m).place(self.r1)
+    # and ...
+    # which would give us a SoA
+\end{lstlisting}
+
+Bien que beaucoup de murs partagent leur matériaux en communs,
+ceux-ci ont été dupliqués. Cela a rendu le code plus simple (car accès à toutes les propriétés du mur par un indice) 
+et à peut être aussi rendu l'accès mémoire plus localisé mais ça n'a
+pas été vérifié.
+
+
+\subsubsection{Optimisation sur le calcul des angles}
+
+Passer par les fonctions trigonométriques $\arccos$ puis $\cos$ et $\sin$
+est lent pour l'ordinateur.
+
+\textbf{Wall} ne calcule donc pas les angles mais plutôt les fonctions trigonométriques
+directement comme montré dans l'exemple \ref{subsub:2rebond}.
+
+\subsection{Unit Solver}
+
+Le fichier \textbf{unit\_solver} contient les méthodes pour calculer la puissance moyenne qu'on
+obtiendra en un point $rx$ depuis un point $tx$ en calculant chaque réflexion et transmission de tous les rayons possibles.
+
+\subsubsection{Transmission}
+
+Une fonction \texttt{find\_intersection(r0, u, p2, q2)} pour trouver l'intersection entre
+un mur et un rayon en renvoyant un paramètre $t$ qui donne le point par $\vec{r} = t \vec{u}$.
+\warningsign ce paramètre ne garantit pas encore que l'on a une intersection physique.
+Pour cela, il faut passer à la fonction suivante: \texttt{intersect(u, n, p1, q1, p2, q2)}
+(avec p1, q1 les points extrêmes du mur et q2, p2 le rayon). 
+Dans cette fonction on vérifie d'abord que p2 et q2 soient chacun d'un côté different du mur grâce
+ à leur produit scalaire avec $\vec{n}$, 
+puis on regarde le point d'intersection ip et on determine par $sign(<ip-p1,u>) ?= sign(<ip-q1,u>)$ 
+si il fait partie du mur ou non.
+
+On peut maintenant définir \texttt{wall\_transmission(world, p2, q2, index1=-1, index2=-1)}
+qui va prendre un rayon et itérer parmi tous les murs pour déterminer avec la fonction
+\texttt{intersect} si il faut calculer un coefficient de transmission (par la fonction dans \textbf{Wall}). Dans
+ce cas, il sera multiplié au coefficient global de transmission renvoyé par la fonction.
+Si l'on sait que le rayon part d'un mur ou rebondit sur un mur, \texttt{index1,2} permet 
+de les enlever de la boucle.
+
+\subsubsection{Reflexion}
+Avant de traiter les réflexions, on prévoit la fonction \texttt{bounce\_cond(r0, n, tx, rx)}
+pour vérifier l'existence physique de cette dernière par rapport au mur avec
+$sign(<n,p2 - r0>) ?= sign(<n,q2 - r0>)$ ($r0$ un point du mur et $p2,q2$ le rayon)
+
+
+\subsubsection{Mise en commun}
+En mettant ces fonctions en commun, on arrive à la fonction 
+principale \texttt{calculate\_power(world, tx, rx)} dont
+le but va être de remplir la formule \eqref{f:p_moy}.
+
+\begin{enumerate}
+    \item[0] Elle calcule d'abord la
+composante directe avec \texttt{wall\_transmission} et la distance entre $tx$ et $rx$
+    \item[1] Puis on passe au premier itérateur des murs: au sein de celle-ci,
+on utilise le tracé géométrique pour obtenir le trajet, on vérifie si la réflexion
+est physique avec \texttt{bounce\_cond}, on trouve le point d'intersection avec
+\texttt{find\_intersection},
+on vérifie par une méthode analogue à celle dans \texttt{intersect} si ce point fait partie du mur.
+Et enfin on calcule les coefficient de transmission de chaque rayon avec \texttt{wall\_transmission}
+et les coefficient de réflexion pour chaque rayon avec la méthode statique \texttt{Wall.get\_rn2} (module carré).
+    \item[2] On place dans ce premier itérateur le deuxième pour traiter des réflexions doubles.
+On vérifie d'abord qu'on ne fait pas une réflexion double sur le même mur.
+Ensuite, le tracé géométrique demandant d'abord le calcul du dernier (deuxième) point d'intersection,
+on procède aux mêmes vérifications et calculs en marche arrière jusqu'à retomber sur $tx$
+puis de calculer les coefficients pour chaque rayon.
+\end{enumerate}
+
+
+\begin{tcolorbox}[colback=red!10!white,colframe=red!50!black,title=Remarque,sharp corners]
+    L'exécution d'un code dans le gpu rend la définition d'un algorithme récursif inutile.
+    Étant donné que la récursion n'est pas disponible, 
+    pour une fonction de récursion qui se rappelle n fois, le compilateur
+    devrait générer et compiler une fonction non récursive pour chaque changement de n.
+    Le nombre de réflexions étant seulement de 2, il n'est pas grave d'expliciter le tout en 2 for-loops.
+\end{tcolorbox}
+
+\subsection{Grid}
+
+La classe Grid parallelise \texttt{calculate\_power} de \textbf{unit\_solver} sur une grille 3D de $rx$ pour $n$ émetteurs.
+La puissance moyenne est donc calculée pour tous ses points. On sélectionne
+ensuite la puissance maximale parmi les $n$ émetteurs. Ceci fait, on peut convertir
+le tout en $dbm$ et en débit binaire.
+
+\subsubsection{Conversion en débit binaire}
+\label{subsub:conversion_bin}
+
+On a une relation linéaire de la puissance en $dbm$ vers le débit binaire en $\log$.
+
+On construit donc une fonction pour passer de l'un à l'autre qui ne devrait
+ être utilisée que dans la gamme (-90dbm à -40dbm).
+
+% \begin{table}[H]
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|ccc|}
+    \hline Sensibilité & Débit binaire & log(Débit binaire) \\
+    \hline$-90 \mathrm{dBm}$ & $50 \mathrm{Mb} / \mathrm{s}$ & 6 + log(50) \\
+    \hline$-40 \mathrm{dBm}$ & $40 \mathrm{~Gb} / \mathrm{s}$ & 9 + log(40) \\
+    \hline
+\end{tabular}
+\end{table}
+
+\begin{align*}
+    &f \colon x \in [-90, -40] \longrightarrow 6 + \log(50) + \frac{3 + \log(40) - \log(50)}{50} (x + 90)\\
+    &\text{débit binaire} = 10^{f(x)}
+\end{align*}
+
+\subsubsection{Optimisation par la librairie Taichi}
+La librairie python \texttt{taichi} permet d'une part de compiler des fonctions
+python en langages plus rapide et d'autre part de paralléliser
+les for-loop au scope d’exécution le plus haut dans les fonctions ayant le décorateur
+\texttt{@ti.kernel}. La compilation et l'exécution en parallèle dans le cpu permettent
+déjà d'atteindre l'ordre de $10^{-2}s$ puis avec le passage au gpu : $10^{-3}s$ pour une grille
+de cellules $10cm\times10cm$ sur le plan de OPERA-WCG. Ces calculs sont effectués sur une
+puce m1 pro qui se situe selon les benchmark entre une Nvidia GeForce RTX 3050 Ti (Laptop) et 4050 (Laptop)\footnote{\href{https://www.notebookcheck.net/Apple-M1-Pro-14-Core-GPU-Benchmarks-and-Specs.576651.0.html}{notebookcheck.net benchmark}}
+
+Dans ce temps de calcul, on compte aussi le temps pour pouvoir utiliser les données en dehors du contexte de taichi
+sans quoi il semblerait que l'on puisse descendre encore un peu sur le
+temps d'exécution pour l'option gpu (l'option cpu ne souffrant pas de ces transferts de données).
+L'idéal aurait alors été de centrer la conception du programme autour de l'algorithme d'optimisation
+pour éviter ces transfers gpu-cpu. Cela aurait néanmoins empêché d'utiliser une 
+librairie externe d'algorithmes d'optimisation et aurait rendu le développement bien plus long.
+La temps d'exécution étant bien assez court, cela n'a pas été requis.
+
+\subsubsection{Optimisation: pourquoi paralléliser sur la grille de rx ?}
+Une autre option aurait été de paralléliser le calcul sur la double for-loop de \texttt{calculate\_power} directement.
+Seulement, on cherche à paralléliser le plus d'éléments possibles et si on compare ces deux options:
+\begin{itemize}
+    \item 17 murs, double for-loop : $\rightarrow 17^2 = 289$
+    \item grille de $0.5m$ minimum, calcul en tout point de la grille : $\rightarrow \frac{8}{0.5} \times \frac{15}{0.5} = 480$
+    (sans compter le facteur $n$ pour les émetteurs)
+\end{itemize}
+
+Il est donc preferable de paralléliser sur la grille.
+
+
+
+
+
+\subsection{Data \& Utils}
+data.py \& utils.py sont partagés par tous les fichiers, 
+ils contiennent d'une part toutes les données pour
+caractériser le problème et d'autre part des imports et méthodes souvent utilisés
+
+Les données introduites dans le logiciel pour OPERA-WCG et pour le problème illustratif
+du syllabus d'exercice sont dans l'annexe \ref{sub:data}
+
+\subsection{Affichage}
+\textbf{display} s'occupe de plot les données de la grille dans un repère orthonormé. Il peut faire appel à \textbf{Rays}
+qui contient tous les rayons à (0,1,2) rebonds pour un couple $(tx,rx)$ donné.
+
+L'objet \textbf{display} fera aussi appel à \textbf{world} pour qu'il utilise \textbf{display}
+pour dessiner les murs avec le code couleur de la table \ref{tab:code_couleur}.
+
+\begin{table}[htbp]
+    % \centering
+    \caption{Code couleur}
+    \label{tab:code_couleur}
+    
+\begin{tabular}{|c|c|c|c|} 
+    \toprule
+    Matériaux & $\epsilon_r$ & $\sigma[S/m]$ & couleur \\
+    \midrule
+    % Brique & 3,95 & 0,073 & \textcolor{}{} \\
+    % \midrule
+    Béton & 6,4954 & 1,43 & \textcolor{red}{$\blacksquare$}\\
+    \midrule
+    Cloison & 2,7 & 0,05346 & \textcolor{green}{$\blacksquare$}\\
+    \midrule
+    Vitre & 6,3919 & 0,00107 & \textcolor{cyan}{$\blacksquare$}\\
+    \midrule
+    Paroi métallique  & 1 & $10^7$ & \textcolor{gray}{$\blacksquare$} \\
+    \bottomrule
+\end{tabular}
+\end{table}
+
+Il y aura 2 affichages :
+\begin{itemize}
+    \item Affichage de la puissance moyenne en $dbm$ bornée de $-40dbm$ à $-90dbm$
+    (on transforme tout ce qui est en dessous de $-90dbm$ en $-\infty \equiv 0W$)
+    \item Affichage du débit binaire en $GB/s$ par \ref{subsub:conversion_bin}.
+\end{itemize}
+
+
+
+
+\section{Vérification}
+
+\subsection{Exercice du syllabus}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.35\textwidth]{images/verif/rayons.png}
+    \caption{Sortie graphique du programme quand on entre les données de l'exercice. Les axes sont en [m]. \textbf{Les murs sont nommés de 0 à 2}}
+    \label{f:ray_ex}
+\end{figure}
+
+\begin{figure}[H]
+\begin{lstlisting}[language=python]
+direct : Prx 3.336E-10 <-
+first bounce : wall 0 : Prx 1.039E-11 <-
+second bounce : wall 0,1 : Prx 4.136E-12 <-
+first bounce : wall 1 : Prx 9.554E-12
+second bounce : wall 1,2 : Prx 1.287E-13
+total rays: 5
+\end{lstlisting}
+\caption{\texttt{stdout} du programme quand on entre les données de l'exercice}
+\end{figure}
+
+On utilise ici la classe \textbf{Rays} pour le calcul, car celle ci
+possède une fonction \texttt{calculate\_power} modifiée pour stocker les
+points de rayons et afficher les puissances partielles (pour chaque composante à (0,1 ou 2) réflexions)
+
+Les paramètres pour ce problème sont en commentaire dans l'annexe \ref{sub:data}.
+\subsubsection{Calcul pour un exemple à deux rebonds}
+\label{subsub:2rebond}
+
+Les formules importantes ont été écrites dans \textit{mathematica} pour faciliter
+le calcul avec les nombres complexes. 
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.4\textwidth]{images/verif/2_rebonds.png}
+    \caption{Tracé géométrique du problème, $tx = (32, 10)$ et $rx = (47, 65)$}
+    \label{f:exemple}
+\end{figure}
+
+On commence par trouver géométriquement les points $\vec{r}_{i1}, \vec{r}_{i2}$
+
+\begin{align*}
+    &\vec{r}_{i1} = (-32, 10) &\vec{r}_{i2} = (-32, 150)
+\end{align*}
+
+On voit qu'on aura une transmission en $Pt$ et 2 réflexions en $Pr1, Pr2$
+
+On doit trouver ces points d'intersection avec les murs.
+Pour cela il suffit de faire une interpolation linéaire de 2 points du rayons
+et de regarder le point $x$ ou $y$ pour lequel on intersecte le mur.
+La connaissance de $Pt$ requiert la connaissance de $Pr1$ qui lui même requiert $Pr2$.
+
+Commençons donc par $Pr2$:
+On fait une interpolation linéaire de $\vec{r}_{i2}$ à $\vec{r}_{r}$ $\equiv f(x)$
+
+\begin{align*}
+    &f(x) = y_{i2} + \frac{y_r - y_{i2}}{x_r - x_{i2}}(x - x_{i2})
+    = 150 - \frac{85}{79}(x + 32)\\
+    &\textrm{on cherche $x$ pour avoir $y=f(x)=y_{mur1}=80$}\\
+    &f(x) = 80 \iff x = 33.05 = x_{Pr2}
+\end{align*}
+
+Finalement : $Pr2 = (33.05, 80)$
+
+On peut effectuer des calculs presque identiques et obtenir $Pr1 = (0, 44.435)$ et $Pt = (22.707, 20)$
+
+Il ne reste qu'à calculer les angles d'incidence $\cos(\theta_i), \sin(\theta_i)$ 
+et de transmission $\cos(\theta_t), \sin(\theta_t)$
+avant de pouvoir calculer les coefficients de transmission et de réflexion.
+
+Commençons par les angles de la transmission sur le mur 2 (voir figure \ref{f:ray_ex})
+
+\begin{equation}
+\label{f:cos_i}
+    \begin{aligned}
+    & \cos \theta_i=\left|<\frac{\vec{d}}{\|d\|}, \vec{u}>\right|=\frac{d_y}{\|d\|}=0.732532
+    \end{aligned}
+\end{equation}
+Dans cette formule \eqref{f:cos_i}, on a pris $\vec{u}$ pour avoir
+le vecteur normal à la surface du mur et on a défini un vecteur
+d'incidence $\vec{d} = Pr1 - \vec{r}_e$
+
+$\sin(\theta_i)$ est obtenu simplement par $\sqrt{1 - \cos(\theta_i)^2} = 0.680733$
+
+Ensuite l'angle de la transmission dans le mur est donné par $\sin(\theta_t) = \frac{\sin(\theta_i)}{\sqrt{\epsilon_r}} = 0.31071$
+et $\cos(\theta_t) = \sqrt{1 - \sin(\theta_t)^2} = 0.950505$
+
+Le coefficient de réflexion de surface pour une polarisation perpendiculaire
+
+\begin{equation}
+    \Gamma_{\perp}\left(\theta_i\right)=\frac{Z_m \cos \theta_i-Z_0 \cos \theta_t}{Z_m \cos \theta_i+Z_0 \cos \theta_t} = -0.48052 + 0.014901j 
+\end{equation}
+
+On définit $s = \frac{l}{cos(\theta_t)} = 0.157811$ la distance parcourue dans le mur.
+
+\begin{equation}
+    T_m\left(\theta_i\right)=\frac{\left(1-\Gamma_{\perp}^2\left(\theta_i\right)\right) e^{-\gamma_m s}}{1-\Gamma_{\perp}^2\left(\theta_i\right) e^{-2 \gamma_m s} e^{j \beta 2 s \sin \theta_t \sin \theta_i}}=
+    0.62948 + 0.0890456j
+\end{equation}
+
+On calcule de manière similaire les paramètres pour les 2 réflexions en utilisant
+\begin{equation}
+    \Gamma_{m}\left(\theta_i\right)=\Gamma_{\perp}\left(\theta_i\right)-\left(1-\Gamma_{\perp}^2\left(\theta_i\right)\right) \frac{\Gamma_{\perp}\left(\theta_i\right) e^{-2 \gamma_m s} e^{j \beta 2 s \sin \theta_t \sin \theta_i}}{1-\Gamma_{\perp}^2\left(\theta_i\right) e^{-2 \gamma_m s} e^{j \beta 2 s \sin \theta_t \sin \theta_i}}
+\end{equation}
+\begin{align}
+    &\Gamma_{m,1} = -0.471151 + 0.251816j 
+    &\Gamma_{m,2} = -0.419027 + 0.246183j
+\end{align}
+
+On voit géométriquement (figure \ref{f:exemple}) que la distance est $|\vec{r}_r - \vec{r}_{i2}|$ et en utilisant la formule \eqref{f:p_moy}:
+
+\begin{align}
+    <P_{RX}> = P_{RX0} \times |T_{m}|^2 \times |\Gamma_{m,1}|^2 \times |\Gamma_{m,2}|^2 \frac{1}{d^2} = 4.127 \times 10^{-12}
+\end{align}
+
+\subsubsection{Vérification avec le code}
+
+Dans l'exercice du syllabus, vu qu'on calcule les champs, on obtient des phénomènes 
+d'interference non présents dans la puissance moyenne. Il faut donc
+faire attention à bien prendre les résultats qui utilisent la puissance moyenne.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Vérification des puissances moyennes [W]}
+    \label{tab:my_table}
+    \begin{tabular}{c|c|c}
+        \toprule
+        Murs & Puissance Syllabus ou Calculée & Puissance Code \\
+        \midrule
+        direct $\times$ & $3.33 \times 10^{-10}$ & $3.336 \times 10^{-10}$ \\
+        une réflexion avec 0 & $1.039 \times 10^{-10}$ 
+        \tablefootnote{Dans le syllabus on a le résultat en $dBm$ de la puissance moyenne
+            comptant la transmission directe et le premier rebond sur le mur 0.
+            En passant en $W$ et en soustrayant la composante directe, on obtient bien
+            le résultat affiché
+        } & $1.039 \times 10^{-10}$ \\
+        deux réflexions avec 0 puis 1 & $4.127 \times 10^{-12}$ & $ 4.136 \times 10^{-12} $\\
+
+        % Fill in your data here
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Vérification du tracé des rayons}
+
+On se place dans le cas un peu plus complexe des bureaux de OPERA-WCG.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{images/verif/rayons_complex.png}
+    \caption{tx = (9.4, 1.0), rx = (8.0, 6.0)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{images/verif/rayons_complex_2.png}
+    \caption{tx = (9.4, 1.0), rx = (2.0, 5.0)}
+\end{figure}
+
+Tous les rayons semblent être explicables par l'optique géométrique.
+    
+
+\section{Résultat de calcul}
+
+Pour les bureaux d'OPERA-WCG on obtient la figure \ref{fig:base}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.49\textwidth]{images/1_dbm_non_opti.png}
+    \includegraphics[width=0.49\textwidth]{images/1_bin_non_opti.png}
+    \caption{Émetteur dans la position suggérée : tx = (9.4, 1.0); grille de pas 0.5m}
+    \label{fig:base}
+\end{figure}
+
+La profondeur de peau de notre béton à cette fréquence : $\delta = \frac{1}{105.63} < 1cm$.
+Les murs ayant une épaisseur de 30cm, il n'y aura jamais aucune onde qui passera au travers
+pour atteindre l'ascenseur.
+On supposera donc que l'ascenseur n'est pas présent pour réduire le temps de calcul. 
+La figure \ref{fig:elevator} montre effectivement que cet ascenseur n'a pas d'impact.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/verif/elevator.png}
+    \caption{Émetteur dans la position suggérée : tx = (9.4, 1.0); grille de pas 0.5m, \textbf{avec ascenseur}}
+    \label{fig:elevator}
+    
+\end{figure}
+
+On constate aussi qu'un unique émetteur dans la position suggérée ne suffira pas à couvrir l'ensemble des bureaux.
+
+\section{Suggestion pour améliorer la réception}
+
+Le but est de trouver un compromis entre le nombre d'émetteurs (donc prix) et couverture\footnote{Le terme couverture traduit que l'on privilégie d'avoir une bonne reception partout plutôt qu'une excellente réception localisée}.
+
+\subsection{Recherche de maximum}
+Pour commencer, il faut savoir où placer ces émetteurs. pour cela,
+nous allons utiliser un algorithme de recherche de maximum global.
+Nous sommes ici en présence d'un problème peu continu car changer un peu 
+la position d'un émetteur
+peut d'un coup lui permettre d'atteindre une nouvelle piece.
+Dans ce cadre peu continu, les algorithmes conventionnels purement déterministes
+auront du mal à converger.
+
+C'est pourquoi il a été nécessaire de prendre un algorithme avec une partie un peu
+plus aléatoire, d'évolution générationnelle. Celle-ci à été mélangée
+avec un algorithme de manipulation géométrique pour l'étape de mutation. Cet algorithme
+est appelé \textbf{évolution différentielle}.
+
+% \begin{tcolorbox}[colback=blue!10!white,colframe=blue!50!black,title=Evolution differentielle,sharp corners]
+%     L'evolution différentielle mélange algorithme génétique et technique géométrique.
+%     Nous avons une population d'individus dont les mutations et recombinaisons sont dictées 
+%     par une manipulation géométrique.
+% \end{tcolorbox}
+
+Nous prenons l'implementation de la librairie \textit{scipy}
+
+\texttt{scipy.optimize.differential\_evolution(func, bounds, args=(n), strategy='best1bin', popsize=40)}
+\begin{itemize}
+    \item \textbf{func} sera notre fonction coût (voir \ref{sub:arch_opti})
+    \item \textbf{bounds} délimite la zone dans laquelle on peut placer nos émetteurs (ici : l'appartement) 
+    \item \textbf{pop\_size} augmentera la population d'essais ce qui augmentera nos chances de tomber sur le maximum global.
+
+\end{itemize}
+
+\subsection{Architecture d'optimisation}
+\label{sub:arch_opti}
+
+Le plus important ici est de trouver une fonction coût pour emmener l'algorithme
+vers la solution de manière rapide et fiable.
+Ici nous prenons $f = \sqrt{\sum_{i,j}power[i,j]^2}$ (rms) que l'algorithme tentera de maximiser.
+Prendre le carré des valeurs de puissance permet de punir d'avantage les endroits où
+la reception est mauvaise et d'augmenter le gradient des valeurs de $f$ ce qui 
+augmente la vitesse de convergence. 
+
+Pour focaliser l'algorithme sur la maximisation de la couverture,
+on ignore les valeurs de puissance au dessus de $-50dbm$ qui ne représentent que la puissance
+à immédiate proximité de l'antenne. On peut effectivement voir sur la figure \ref{fig:coupure}
+que cette restriction mène effectivement à une amélioration de la couverture globale.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.49\textwidth]{images/optimize/1_dbm_40.png}
+    \includegraphics[width=0.49\textwidth]{images/optimize/1_dbm.png}
+    \caption{A gauche : coupure à $-40dbm$; A droite : coupure à $-50dbm$}
+    \label{fig:coupure}
+\end{figure}
+
+
+L'optimisation s'effectue sur une grille de pas $0.2m$. Les coordonnées optimales
+trouvées sont ensuite affichées avec une grille de pas $0.05m$
+
+L'algorithme a eu tendance à placer l'antenne pile dans un mur, ce qui empêchait la détection
+de la transmission et donc de l'atténuation en résultant. Il a donc fallu ajouter une condition
+pour éviter cet endroit.
+
+
+
+
+
+\subsection{Essais d'optimisation}
+
+Essayons avec un émetteur.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/optimize/1_dbm.png}
+    % \includegraphics[width=0.49\textwidth]{images/optimize/1_bin.png}
+\end{figure}
+
+On voit que cet emplacement offre une meilleure couverture mais que ça reste insuffisant pour
+couvrir l'ensemble de l'espace correctement. 
+
+En réalité, on peut placer un émetteur plus au milieu de 
+l'appartement et obtenir une meilleure couverture mais avec 
+avec une puissance totale (sans coupure à -50dbm) et rms sensiblement plus faible.
+Dans nos critères, couper à -50dbm est très arbitraire et pourrait être
+adapté en fonction du nombre d'émetteurs et donc
+la puissance qu'on pourrait espérer avoir globalement mais c'est une valeur
+qui fonctionne bien lorsque l'on cherche à assurer un débit de l'ordre de 10Gb/s.
+
+Regardons ce qui se passe quand on ajoute un 2ème émetteur.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/optimize/2_dbm.png}
+    % \includegraphics[width=0.49\textwidth]{images/optimize/2_bin.png}
+\end{figure}
+
+On parvient à rester $\ge -65db$ partout ce qui équivaut à $1.4 Gb/s$.
+
+Des exemples avec plus d'émetteurs sont dans les sous annexes de \ref{sub:more_emit}.
+Ils seront discutés plus tard.
+
+\subsection{Conclusion sur le nombre d'émetteurs}
+Plutôt que de montrer à chaque fois la répartition, regardons des variables
+plus globales.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/optimize/data_compare.png}
+    \caption{Evolution de la puissance totale et de la couverture}
+    \label{fig:datacomp}
+\end{figure}
+
+Attention, sur la figure \ref{fig:datacomp} les fonctions coût sont différentes. 
+\begin{itemize}
+    \item A gauche: on effectue une somme simple, non bornée aux valeurs $< -50dbm$ mais plutôt à $< -40dbm$
+    Ce qui donne une somme exacte de la puissance reçue.
+    
+    \item A droite: on utilise la fonction coût rms de \ref{sub:arch_opti} avec cette restriction
+    aux valeurs $< -50dbm$ qui traduira donc mieux la qualité de la couverture.
+\end{itemize}
+
+A gauche,
+la fonction coût est une simple sommation des puissances, à droite,
+on a la fonction coût comme décrite avant en \textit{rms}.
+
+
+% \begin{tcolorbox}[colback=blue!10!white,colframe=blue!50!black,title=Conclusion,sharp corners]
+La figure \ref{fig:datacomp} montre que placer 2 émetteurs
+est un minimum et qu'on atteint une presque saturation à partir de 4 du critère de couverture rms 
+qui s'explique par le plafond à -50dbm dans la sommation.
+Cette saturation traduit bien que au delà de 4 émetteurs, la couverture à plus de -50dbm ($\sim 10Gb/s$) est
+assurée presque partout.
+
+La solution à 4 émetteurs ne permet pas de couvrir parfaitement
+une des pièces (voir \ref{sub-4}). Celle-ci étant
+relativement petite, elle pourrait servir de salle à machines à cafés
+qui ne requiert par la meilleure réception.
+
+Si la couverture parfaite de tout l'étage est requise, 
+Il suffit de passer à la solution à 5 émetteurs (voir \ref{sub-5})
+
+% \end{tcolorbox}
+
+
+\section{Annexes}
+
+% \subsection{Données du problème du Syllabus}
+% \begin{itemize}
+%     \item $f = 868.3 \times 10^6$, $\omega = 2\pi f$, $\lambda = \frac{c}{f}$
+%     \item $\beta = \omega \sqrt{\mu_0  \epsilon_0}$
+%     \item $\epsilon_r = 4.8$
+%     \item $\sigma = 0.018 S/m$
+%     \item $l = 0.15m$
+%     \item $Z_0 = 120\pi$
+%     \item $R_{ar} = 73 \Omega$
+%     \item $P_{tx} = 10^{-3} W$
+% \end{itemize}
+
+\subsection{Plus d'émetteurs}\label{sub:more_emit}
+\subsubsection{Trois émetteurs}
+\label{sub-3}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/optimize/3_dbm.png}
+    % \includegraphics[width=0.49\textwidth]{images/optimize/3_bin.png}
+\end{figure}
+
+\subsubsection{Quatre émetteurs}
+\label{sub-4}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/optimize/4_dbm.png}
+    % \includegraphics[width=0.49\textwidth]{images/optimize/4_bin.png}
+\end{figure}
+
+\subsubsection{Cinq émetteurs}
+\label{sub-5}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/optimize/5_dbm.png}
+    % \includegraphics[width=0.49\textwidth]{images/optimize/5_bin.png}
+\end{figure}
+
+A partir de 5 émetteurs, le temps de calcul devient vraiment long,
+pour une \texttt{pop\_size = 40} l'algorithme fait appel $212811$ fois à la 
+fonction \texttt{get\_power()}
+
+\subsubsection{Six émetteurs}
+\label{sub-6}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.49\textwidth]{images/optimize/6_dbm.png}
+    % \includegraphics[width=0.49\textwidth]{images/optimize/6_bin.png}
+\end{figure}
+
+Avec 6 émetteurs on commence à remplir des espaces inutiles comme la zone de l'ascenseur.
+
+\subsection{Code}
+
+\subsubsection{Main}
+
+\input{code/main_.tex}
+
+\subsubsection{Grid Solver}
+
+\input{code/grid_solver.tex}
+
+\subsubsection{Optimizer}
+
+\input{code/optimizer.tex}
+
+\subsubsection{Unit Solver}
+
+\input{code/unit_solver.tex}
+
+\subsubsection{World}
+
+\input{code/world.tex}
+
+\subsubsection{Wall}
+
+\input{code/wall.tex}
+
+\subsubsection{Materials}
+
+\input{code/materials.tex}
+
+\subsubsection{Display}
+
+\input{code/display.tex}
+
+\subsubsection{Rays}
+
+\input{code/rays.tex}
+
+\subsubsection{Data}
+\label{sub:data}
+
+\input{code/data.tex}
+
+\subsubsection{Utils}
+
+\input{code/utils.tex}
+
+\end{document}

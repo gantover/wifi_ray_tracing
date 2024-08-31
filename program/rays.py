@@ -1,0 +1,113 @@
+from utils import *
+from data import *
+from world import world
+from unit_solver import *
+
+
+@ti.data_oriented
+class Rays:
+    def init_after_world(self, world, tx, rx):
+        self.tx = tx
+        self.rx = rx
+        self.m = world.m
+        self.b1_ip = ti.Vector.field(2, dtype=ti.f32, shape=self.m)
+        self.b2_ip1 = ti.Vector.field(2, dtype=ti.f32)
+        self.b2_ip2 = ti.Vector.field(2, dtype=ti.f32)
+        ti.root.dense(ti.ij, self.m**2).place(self.b2_ip1, self.b2_ip2)
+
+    @measure_execution_time
+    def draw_rays_mpl(self, ax):
+        actual_rays = 0
+        x = [self.tx[0], self.rx[0]]
+        y = [self.tx[1], self.rx[1]]
+        ax.plot(x, y, 'r-')
+        actual_rays += 1
+        for i in range(self.m):
+            if self.b1_ip[i][0] != 0.0 or self.b1_ip[i][1] != 0.0:
+                # if the rays has not been filled, its default value is 0.0 and it gets ignored
+                x = [self.tx[0], self.b1_ip[i][0], self.rx[0]]
+                y = [self.tx[1], self.b1_ip[i][1], self.rx[1]]
+                ax.plot(x,y,'b-', linewidth=0.7)
+                actual_rays += 1
+            for j in range(self.m):
+                if self.b2_ip1[i,j][0] != 0.0 or self.b2_ip1[i,j][1] != 0.0 or self.b2_ip2[i,j][0] != 0.0 or self.b2_ip2[i,j][1] != 0.0:
+                    x = [self.tx[0], self.b2_ip1[i, j][0], self.b2_ip2[i, j][0], self.rx[0]]
+                    y = [self.tx[1], self.b2_ip1[i, j][1], self.b2_ip2[i, j][1], self.rx[1]]
+                    ax.plot(x, y, 'g-', linewidth=0.7)
+                    actual_rays += 1
+        ax.plot(self.tx[0], self.tx[1], 'go')
+        ax.plot(self.rx[0], self.rx[1], 'ro')
+        print(f"total rays: {actual_rays}")
+
+
+rays = Rays()
+
+
+@ti.func
+def calculate_power_rays(world, rays):
+    # this calculate_power function is modified to store rays points
+    # and prints out partial powers at each step (0,1,2) reflexions
+    tx = rays.tx
+    rx = rays.rx
+    # d0 = rx - tx
+    # Prx_temp = tm.clamp(PRX0 / (d0.norm() ** 2), 0.0, PRX0)
+    # trans0_0 = wall_transmission(world, rx, tx)
+    # Prx = Prx_temp * trans0_0
+    # print(f"direct : Prx {Prx:.3E}")
+
+    for i in range(world.m):
+        # transmission_factor_msq = ti.f32(1.0)
+        # reflexion_factor_msq = ti.f32(1.0)
+        r0_i, r1_i = world.r0[i], world.r1[i]
+        u_i, n_i = world.u[i], world.n[i]
+        tx1 = get_next_tx(r0_i, u_i, n_i, tx)
+        if bounce_cond(r0_i, n_i, tx, rx):
+            t = find_intersection(r0_i, u_i, tx1, rx)
+            ip = Wall.point_on_wall(r0_i, u_i, t)
+            if tm.sign((ip - r0_i).dot(u_i)) != tm.sign((ip - r1_i).dot(u_i)):
+                # reflexion_factor_msq *= Wall.get_rn2(world, i, (ip-tx).normalized())
+                # transmission_factor_msq *= wall_transmission(world, tx, ip, i) \
+                #                            * wall_transmission(world, ip, rx, i)
+                # Prx_temp = tm.clamp(PRX0 / ((rx - tx1).norm() ** 2), 0.0, PRX0)
+                # Prx = Prx_temp * transmission_factor_msq * reflexion_factor_msq
+                # print(f"first bounce : wall {i} : Prx {Prx:.3E}")
+                rays.b1_ip[i] = ip
+
+        for j in range(world.m):
+            if i == j:
+                continue
+            # transmission_factor_msq = ti.f32(1.0)
+            # reflexion_factor_msq = ti.f32(1.0)
+            r0_j, r1_j = world.r0[j], world.r1[j]
+            u_j, n_j = world.u[j], world.n[j]
+            if not bounce_cond(r0_j, n_j, tx1, rx):
+                continue
+            tx2 = get_next_tx(r0_j, u_j, n_j, tx1)
+            t2 = find_intersection(r0_j, u_j, tx2, rx)
+            ip2 = Wall.point_on_wall(r0_j, u_j, t2)
+            if tm.sign((ip2 - r0_j).dot(u_j)) == tm.sign((ip2 - r1_j).dot(u_j)):
+                continue
+            if not bounce_cond(r0_i, n_i, tx, ip2):
+                continue
+            t1 = find_intersection(r0_i, u_i, tx1, ip2)
+            ip1 = Wall.point_on_wall(r0_i, u_i, t1)
+            if tm.sign((ip1 - r0_i).dot(u_i)) == tm.sign((ip1 - r1_i).dot(u_i)):
+                continue
+            rays.b2_ip1[i, j] = ip1
+            rays.b2_ip2[i, j] = ip2
+            # reflexion_factor_msq *= Wall.get_rn2(world, i, (ip1 - tx).normalized()) \
+            #                         * Wall.get_rn2(world, j, (ip2 - ip1).normalized())
+            # transmission_factor_msq *= wall_transmission(world, tx, ip1, i) \
+            #                            * wall_transmission(world, ip1, ip2, j, i) \
+            #                            * wall_transmission(world, ip2, rx, j)
+            # distance = (rx - ip2).norm() + (ip2 - tx1).norm()
+            # Prx_temp = tm.clamp(PRX0 / (distance ** 2), 0.0, PRX0)
+            # Prx = Prx_temp * reflexion_factor_msq * transmission_factor_msq
+            # print(f"second bounce : wall {i},{j} : Prx {Prx:.3E}")
+
+
+@ti.kernel
+def test_rays(rays: ti.template()):
+    # taichi function have to be used in a taichi kernel
+    calculate_power_rays(world, rays)
+

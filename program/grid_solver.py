@@ -1,0 +1,112 @@
+from utils import *
+from data import *
+from unit_solver import calculate_power
+from world import world
+
+
+@ti.data_oriented
+class Grid:
+    def __init__(self, n):
+        self.rx_centers = ti.Vector.field(2, dtype=ti.f32)
+        self.rx_powers_n = ti.field(ti.f32)
+        self.rx_powers = ti.field(ti.f32)  # where the best from rx_powers_n is extracted
+        self.rx_powers_dbm = ti.field(ti.f32)  # converted to dbm
+        self.rx_binary = ti.field(ti.f32)  # converted to binary debit
+        self.n = n  # number of emitters
+        ti.root.dense(ti.ijk, (dim.y, dim.x, n)).place(self.rx_powers_n)
+        ti.root.dense(ti.ij, (dim.y, dim.x)).place(self.rx_centers)
+        ti.root.dense(ti.ij, (dim.y, dim.x)).place(self.rx_powers, self.rx_powers_dbm, self.rx_binary)  # AoS
+
+    @ti.kernel
+    def generate_grid(self) -> ti.i32:
+        # fills the rx_centers array with all rx coordinate with respect to cell size
+        for i, j in self.rx_centers:
+            x = dim.cell_size / 2.0 + j * dim.cell_size
+            y = dim.cell_size / 2.0 + i * dim.cell_size
+            self.rx_centers[i, j] = vec2([x, y])
+        return 0
+
+    @ti.kernel
+    def fill_power(self, txs: ti.types.ndarray(dtype=ti.f32, ndim=1)):
+        # accepting numpy array as pos makes the code slower here
+        # but since the optimization algorithm sends numpy arrays of positions
+        # this is still faster compared to manual conversion
+        for i, j, k in self.rx_powers_n:
+            # i,j are all the grid receiver points
+            # k is the chosen emitter in the n sized array
+            if self.rx_centers[i, j][0] >= 12.0 and self.rx_centers[i, j][1] <= (4.0 / 3.0 * (self.rx_centers[i, j][0] - 12.0)):
+                # avoids unwanted area behind the glass panel
+                self.rx_powers_n[i, j, k] = 0.0
+            else:
+                self.rx_powers_n[i, j, k] = PRX0 * calculate_power(world, vec2([txs[2*k], txs[2*k+1]]), self.rx_centers[i, j])
+
+        for i, j in self.rx_powers:
+            # we have the results for all emitters, now we need to take the best ones
+            current_best = ti.f32(0.0)
+            # serialized
+            for k in range(self.n):
+                if self.rx_powers_n[i, j, k] > current_best:
+                    current_best = self.rx_powers_n[i, j, k]
+            self.rx_powers[i, j] = current_best
+
+    @ti.kernel
+    def power_to_dbm(self):
+        for i, j in self.rx_powers_dbm:
+            power = ti.f32(10.0) * log10(self.rx_powers[i, j] * 1e3)
+            if power < -90.0:
+                # under -90dbm, the receiver cannot process the signal
+                # therefore, we cut it there and place -inf dbm instead, equivalent
+                # to a power of 0
+                power = -tm.inf
+            elif power > -40.0:
+                # the receiver is limited to a reception of -40 dbm signal
+                power = -40.0
+            self.rx_powers_dbm[i, j] = power
+
+    @ti.kernel
+    def dbm_to_binary(self):
+        # translates the linear relationship of dbm to log(binary)
+        # and then converts it back to binary in GHz
+        for i, j in self.rx_binary:
+            dbm = self.rx_powers_dbm[i, j]
+            if -90 <= dbm <= -40:
+                bd_log = 6 + log10(50) + ((3 + log10(40) - log10(50))/50 * (dbm + 90))
+                bd = 10**bd_log * 1e-9
+                self.rx_binary[i, j] = bd
+            else:
+                self.rx_binary[i, j] = -tm.inf
+
+    @ti.kernel
+    def get_rms(self) -> ti.f32:
+        # used in the cost function
+        rms = 0.0
+        # parallelized
+        for j in range(dim.x):
+            sub_total = 0.0
+            # serialized
+            for i in range(dim.y):
+                elem = self.rx_powers[i, j]
+                if elem >= P_MAX_50 or elem <= P_MIN:
+                    continue
+                else:
+                    sub_total = sub_total + ti.pow(elem, 2)
+            # has to be explicitly atomic
+            ti.atomic_add(rms, sub_total)
+        return ti.sqrt(rms)
+
+    @ti.kernel
+    def get_total(self) -> ti.f32:
+        total = 0.0
+        # parallelized
+        for j in range(dim.x):
+            sub_total = 0.0
+            # serialized
+            for i in range(dim.y):
+                elem = self.rx_powers[i, j]
+                if elem >= P_MAX_40 or elem <= P_MIN:
+                    continue
+                else:
+                    sub_total = sub_total + elem
+            # has to be explicitly atomic
+            ti.atomic_add(total, sub_total)
+        return total

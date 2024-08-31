@@ -1,0 +1,80 @@
+\begin{lstlisting}[language=python]
+from utils import *
+from data import *
+
+class Wall:
+    def __init__(self, r0, r1, l, material):
+        self.r0, self.r1 = vec2(r0), vec2(r1)  # conversion to taichi types
+        self.u = (self.r1 - self.r0).normalized()  # wall unit tangent
+        self.n = vec2([self.u[1], -1.0 * self.u[0]]).normalized()  # wall unit normal
+        self.l = l  # wall thickness
+        self.gamma = vec2([material.gamma.real, material.gamma.imag])
+        self.Z = vec2([material.Z.real, material.Z.imag])
+        self.eps_r = material.eps_r
+        self.color = material.color
+
+    
+    @staticmethod
+    @ti.func
+    def get_angles_and_s(world, wall_id, d0n):
+        n = world.n[wall_id]
+        l = world.l[wall_id]
+        eps_r = world.eps_r[wall_id]
+
+        cos_i = ti.abs(n.dot(d0n))  # incident
+        sin_i = ti.sqrt(1.0 - ti.pow(cos_i, 2))
+        sin_t = sin_i / ti.sqrt(eps_r)  # transmission (inside the object)
+        cos_t = ti.sqrt(1.0 - ti.pow(sin_t, 2))
+        s = l / cos_t  # distance travelled in the wall
+
+        return cos_i, sin_i, cos_t, sin_t, s
+    
+    @staticmethod
+    @ti.func
+    def get_r(Z, cos_i, cos_t):
+        # reflexion coefficient for perpendicular (to the propagation plane) polarisation
+        # and for a single plane
+        a = Z * cos_i
+        b = vec2([Z0 * cos_t, 0.0])
+        return tm.cdiv(a - b, a + b)
+    
+    @staticmethod
+    @ti.func
+    def get_tn2(world, wall_id, d0n):
+        # squared modulus of transmission factor through an actual wall
+        gamma = world.gamma[wall_id]
+        Z = world.Z[wall_id]
+        cos_i, sin_i, cos_t, sin_t, s = Wall.get_angles_and_s(world, wall_id, d0n)
+        r = Wall.get_r(Z, cos_i, cos_t)
+        r2 = tm.cpow(r, 2)
+        a = tm.cexp(-s * gamma)
+        a2 = tm.cpow(a, 2)
+        b = tm.cexp(vec2([0.0, 2.0 * BETA0 * s * sin_i * sin_t]))
+        tn = tm.cdiv(tm.cmul(re_unit - r2, a), re_unit - tm.cmul(tm.cmul(r2, a2), b))
+        tn2 = tn.norm_sqr()
+        if tm.isnan(tn2):
+            tn2 = 0.0
+        return tn2
+    
+    @staticmethod
+    @ti.func
+    def get_rn2(world, wall_id, d0n):
+        # squared modulus of reflexion factor on an actual wall
+        gamma = world.gamma[wall_id]
+        Z = world.Z[wall_id]
+        cos_i, sin_i, cos_t, sin_t, s = Wall.get_angles_and_s(world, wall_id, d0n)
+        r = Wall.get_r(Z, cos_i ,cos_t)
+        r2 = tm.cpow(r, 2)
+        b = tm.cexp(-2 * gamma * s + 2 * im_unit * BETA0 * s * sin_t * sin_i)
+        rn = r - tm.cdiv(tm.cmul(re_unit-r2, tm.cmul(r, b)), (re_unit - tm.cmul(r2, b)))
+        rn2 = rn.norm_sqr()
+        if tm.isnan(rn2):
+            rn2 = 0.0
+        return rn2
+    
+    @staticmethod
+    @ti.func
+    def point_on_wall(r0, u, t):
+        return r0 + t * u
+
+\end{lstlisting}

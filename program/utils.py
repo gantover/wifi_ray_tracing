@@ -1,0 +1,43 @@
+import taichi as ti
+import taichi.math as tm
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import time
+mpl.rcParams['figure.dpi'] = 200
+
+ti.init(arch=ti.gpu,
+        offline_cache=True,
+        offline_cache_max_size_of_files=10**6,
+        offline_cache_file_path='./cache/'
+        )
+
+vec2 = ti.math.vec2
+
+
+@ti.func
+def eq_vec(v1, v2):
+    return v1[0] == v2[0] and v1[1] == v2[1]
+
+
+re_unit = vec2([1.0, 0.0])
+im_unit = vec2([0.0, 1.0])
+
+log2log10 = np.log2(10.0)
+
+
+@ti.func
+def log10(x):
+    return tm.log2(x)/log2log10
+
+
+def measure_execution_time(func):
+    # decorator to measure a function's time to execute
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f"Function {func.__name__} took {execution_time:.2E} seconds to execute")
+        return result
+    return wrapper

@@ -1,0 +1,49 @@
+from world import world
+from grid_solver import *
+from display import image
+from optimizer import *
+from data import *
+from rays import *
+
+""" Allocating and transferring gpu memory for walls """
+world.allocate()
+world.transfer()
+
+""" Optimisation """
+grid = Grid(n)
+grid.generate_grid()
+result = txs_optimize(grid)
+print(result)  # contains information like number of iteration, optimal position and cost function value
+print("rms : ", grid.get_rms())
+print("total : ", grid.get_total())
+
+""" Use the optimized positions and
+display it with a better resolution """
+del grid  # freeing old data
+dim.update(0.05)  # updating the resolution
+precise_grid = Grid(n)
+precise_grid.generate_grid()
+# txs = result.x.astype(np.float32)  # to use the optimized txs
+txs = tx.to_numpy()  # to use the tx defined in data
+precise_grid.fill_power(txs)
+precise_grid.power_to_dbm()  # fills array of dbm
+precise_grid.dbm_to_binary()  # fills array of binary debit
+print("rms : ", precise_grid.get_rms())
+print("total : ", precise_grid.get_total())
+
+""" Rays """
+# rays.init_after_world(world, tx, rx)
+# test_rays(rays)
+
+""" Extract images """
+image.re_init()
+# image.draw_rays(rays)
+image.plot_function(precise_grid.rx_powers_dbm.to_numpy(), "dbm")
+image.plot_emitters(txs)
+image.show()
+image.extract(f"./exports/{n}_dbm.png")
+image.re_init()
+image.plot_function(precise_grid.rx_binary.to_numpy(), "binary")
+image.plot_emitters(txs)
+image.show()
+image.extract(f"./exports/{n}_bin.png")

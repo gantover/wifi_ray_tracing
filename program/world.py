@@ -1,0 +1,93 @@
+from wall import *
+from materials import *
+
+
+@ti.data_oriented
+class World:
+    def __init__(self):
+        self.walls = []
+        self.m = 0
+        self.colors = []
+
+    def add(self, wall):
+        self.walls.append(wall)
+        self.colors.append(wall.color)  # walls will be deleted so we store color separately
+
+    def allocate(self):
+        self.m = len(self.walls)
+        self.r0 = ti.Vector.field(2, dtype=ti.f32)
+        self.r1 = ti.Vector.field(2, dtype=ti.f32)
+        self.u = ti.Vector.field(2, dtype=ti.f32)
+        self.n = ti.Vector.field(2, dtype=ti.f32)
+        self.l = ti.field(dtype=ti.f32)
+        self.gamma = ti.Vector.field(2, dtype=ti.f32)
+        self.Z = ti.Vector.field(2, dtype=ti.f32)
+        self.eps_r = ti.field(dtype=ti.f32)
+        ti.root.dense(ti.i, self.m).place(
+            self.r0, self.r1, self.u, self.n, self.l, self.gamma, self.Z, self.eps_r
+            )
+
+    def transfer(self):
+        for i in range(self.m):
+            self.r0[i] = self.walls[i].r0
+            self.r1[i] = self.walls[i].r1
+            self.u[i] = self.walls[i].u
+            self.n[i] = self.walls[i].n
+            self.l[i] = self.walls[i].l
+            self.gamma[i] = self.walls[i].gamma
+            self.Z[i] = self.walls[i].Z
+            self.eps_r[i] = self.walls[i].eps_r
+        del self.walls  # frees the unused dynamic memory of walls
+
+    def draw_walls(self, ax):
+        for i in range(self.m):
+            x = [self.r0[i][0], self.r1[i][0]]
+            y = [self.r0[i][1], self.r1[i][1]]
+            ax.plot(x, y, self.colors[i])
+
+
+world = World()
+
+
+def concrete_wall(r0, r1):
+    world.add(Wall(r0, r1, 0.3, concrete))
+
+
+def division_wall(r0, r1):
+    world.add(Wall(r0, r1, 0.1, division))
+
+
+concrete_wall([0., 0.], [0., 8.])  # 0
+concrete_wall([0., 8.], [15., 8.])  # 1
+concrete_wall([15., 8.], [15., 4.])  # 2
+concrete_wall([7., 8.], [7., 4.])  # 3
+concrete_wall([12., 0.], [9., 0.])  # 4
+concrete_wall([9., 0.], [9., 2.])  # 5
+concrete_wall([9., 2.], [4., 2.])  # 6
+concrete_wall([4., 2.], [4., 0.])  # 7
+concrete_wall([6., 0.], [0., 0.])  # 8
+
+division_wall([0., 3.], [4., 3.])  # 9
+division_wall([4., 8.], [4., 4.])  # 10
+division_wall([4., 4.], [5., 4.])  # 11
+division_wall([6., 4.], [9., 4.])  # 12
+division_wall([10., 4.], [11., 4.])  # 13
+division_wall([11., 4.], [11., 8.])  # 14
+
+world.add(Wall([12., 0.], [15., 4.], 0.05, glass))  # 15
+
+world.add(Wall([5.85, 0.], [5.85, 2.], 0.05, metal))  # 16
+# world.add(Wall([5.45, 0.], [5.45, 2.], 0.05, metal))
+# world.add(Wall([5.85, 0.], [5.85, 2.], 0.05, metal))  # 17
+# world.add(Wall([4.25, 0.25], [5.75, 0.25], 0.05, metal))  # elevator
+# world.add(Wall([5.75, 0.25], [5.75, 1.75], 0.05, metal))  # elevator
+# world.add(Wall([5.75, 1.75], [4.25, 1.75], 0.05, metal))  # elevator
+# world.add(Wall([4.25, 1.75], [4.25, 0.25], 0.05, metal))  # elevator
+
+
+"""
+Test set
+"""
+# world.add(Wall([0, 20], [0, 80], 0.15, concrete))
+# world.add(Wall([80, 80], [0, 80], 0.15, concrete))
+# world.add(Wall([0, 20], [80, 20], 0.15, concrete))

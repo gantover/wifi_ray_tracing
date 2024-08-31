@@ -1,0 +1,80 @@
+from utils import *
+
+P_MAX_40 = 1e-7  # = -40dbm
+P_MAX_50 = 1e-8  # = -50 dbm
+P_MIN = 1e-12  # = -90 dbm
+B_MAX = 40.0  # binary debit in [GB/s]
+B_MIN = 50 * 1e-3
+
+P_MAX_CL = 1 / ((12.5 * 1e-3)**2)
+# P_MAX_CL is the maximum power normalized by PRX0 (at the limit of
+# the distant fields hypothesis)
+
+PTX = 0.1  # emitter power [W]
+
+Z0 = 120 * np.pi  # empty space impedance
+EPS0 = 8.85418782e-12
+MU0 = 4 * np.pi * 1e-7
+C = 1.0 / np.sqrt(EPS0 * MU0)
+
+FREQ = 6e10  # working frequency of 60Ghz
+
+OMEGA = 2.0 * np.pi * FREQ
+BETA0 = OMEGA * np.sqrt(MU0 * EPS0)
+RAR = 73  # Emission Resistor (we neglect losses)
+LAMBDA = C / FREQ
+GP = (Z0 * PTX) / (np.pi * RAR)  # Grx * Prx
+PRX0 = (LAMBDA**2 * 60 * GP) / (8 * RAR * np.pi**2)
+
+# floor dimensions
+x_size = 15  # [m]
+y_size = 8  # [m]
+
+
+@ti.data_oriented
+class Dimensions:
+    # containing relevant dimension data here allows for an easy update from
+    # anywhere in the code
+    def __init__(self, x_size, y_size, cell_size):
+        self.x_size = x_size
+        self.y_size = y_size
+        self.cell_size = cell_size
+        self.unit_step_density = 1.0/cell_size
+        self.x = int(self.unit_step_density * self.x_size)
+        self.y = int(self.unit_step_density * self.y_size)
+
+    def update(self, cell_size):
+        self.cell_size = cell_size
+        self.unit_step_density = 1.0/cell_size
+        self.x = int(self.unit_step_density * self.x_size)
+        self.y = int(self.unit_step_density * self.y_size)
+
+
+dim = Dimensions(x_size, y_size, 0.2)
+
+n = 1  # number of emitters
+
+# to use with Rays
+tx = vec2([9.4, 1.0])
+# tx = vec2([7.0, 8-5.4])
+# rx = vec2([8.0, 6.0])
+rx = vec2([2.0, 5.0])
+
+"""Sample exercise data"""
+# PTX = 1e-3
+# FREQ = 868.3e6
+#
+# OMEGA = 2.0 * np.pi * FREQ
+# BETA0 = OMEGA * np.sqrt(MU0 * EPS0)
+# LAMBDA = C / FREQ
+# GP = (Z0 * PTX) / (np.pi * RAR)
+# PRX0 = (LAMBDA**2 * 60 * GP) / (8 * RAR * np.pi**2)
+#
+# x_size = 80
+# y_size = 90
+# cell_size = 0.5
+# unit_step_density = (1/cell_size)
+# x_dimension = int(unit_step_density * x_size)
+# y_dimension = int(unit_step_density * y_size)
+# rx = vec2([47.0, 65.0])
+# tx = vec2([32.0, 10.0])
