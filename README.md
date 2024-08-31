@@ -7,6 +7,7 @@ aims to provide optimial solutions to place emitters depending on the available 
 
 ### Particularities
 - Uses gpu to make the calculation in parallel allowing a significant time improvement. It does it via the *taichi* python library
+- Uses the differential evolution algorithm from *scipy* to find an optimal solution
 - All hypothesis can be found inside the [report](/report/Rapport%20RT%20Sess1%20-%20%5BHubert%20Damian%5D.pdf)
 
 ### Examples
